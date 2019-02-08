@@ -141,33 +141,34 @@ float cupSDF(vec3 p) {
   rot_box += anim_angle;
   vec3 p_box = rot_op(rot_box, p);
   vec3 t_box = vec3(0.5, 0.0, 0.0);
-  //t_box += anim_trans;
 
   // apply scale + translation to sphere
   vec3 t_sph = vec3(0.0, 0.5, 0.0);
-  t_sph += anim_trans;
-  float dist_sph = sdf_sphere(trans_pt(p, t_sph) * 2.0, 3.0) / 2.0;
+  //t_sph += anim_trans;
+  float dist_sph = sdf_sphere(trans_pt(p, t_sph) * 1.0, 3.0) / 1.0;
 
   // create cup with sphere + box
   //vec3 p_sph_box = mod(p_box, vec3(1.0, 1.0, 1.0)) - 0.5 * vec3(1.0, 1.0, 1.0);
-  float dist_box = sdf_box(trans_pt(p_box, t_box) * 1.4, vec3(1.2, 3.0, 3.0)) / 1.4;
+  float dist_box = sdf_box(trans_pt(p_box, t_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
   float dist_cup = sect_op(dist_box, dist_sph);
 
   // create cup handle with torus
   vec3 rot_torus = vec3(65.0, 0.0, 0.0);
   rot_torus += anim_angle;
   vec3 p_torus = rot_op(rot_torus, p);
-  vec3 t_tor = vec3(1.5, 0.0, -0.25);
-  t_tor += anim_trans;
-  float dist_torus = sdf_torus(trans_pt(p_torus, t_tor) * 1.6, vec2(1.2, 0.2)) / 1.6;
+  vec3 t_tor = vec3(2.5, 0.0, -0.25);
+  //t_tor += anim_trans;
+  float dist_torus = sdf_torus(trans_pt(p_torus, t_tor) * 0.75, vec2(1.2, 0.2)) / 0.75;
 
   // inside of cup
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
-  t_sph2 += anim_trans;
-  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 2.0, 2.7) / 2.0;
-  vec3 t_box2 = vec3(2.1, 0.0, 0.0);
+  //t_sph2 += anim_trans;
+  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.7) / 1.0;
+  vec3 t_box2 = vec3(3.1, 0.0, 0.0);
   //t_box2 += anim_trans;
-  float dist_box2 = sdf_box(trans_pt(p_box, t_box2) * 1.6, vec3(1.5, 3.0, 3.0)) / 1.6;
+  float dist_box2 = sdf_box(trans_pt(p_box, t_box2) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
+  vec3 t_box3 = vec3(1.7, 0.2, 0.2);
+  float dist_box3 = sdf_box(trans_pt(p_box, t_box3) * 0.8, vec3(0.2, 2.0, 2.0)) / 0.8;
 
   dist_cup = sect_op(dist_box, dist_sph);
   float dist = union_op(dist_cup, dist_torus);
@@ -175,7 +176,9 @@ float cupSDF(vec3 p) {
   float dist_inside = sect_op(dist_sph2, dist_box2);
   // flat bottom of cup
   dist = sub_op(dist_sph2, dist);
+  dist_inside = sect_op(dist_inside, dist_box3);
   dist = union_op(dist_inside, dist);
+
   return dist;
 }
 
@@ -183,13 +186,16 @@ float coffeeSDF(vec3 p) {
   vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
   // sphere
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
-  t_sph2 += anim_trans;
-  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 2.0, 2.7) / 2.0;
+  //t_sph2 += anim_trans;
+  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.7) / 1.0;
   // box
-  vec3 t_box3 = vec3(0.0, 2.8, 0.0);
-  t_box3 += anim_trans;
-  float dist_box3 = sdf_box(trans_pt(p, t_box3) * 1.6, vec3(3.0, 3.0, 3.0)) / 1.6;
+  vec3 t_box3 = vec3(0.0, 4.6, 0.0);
+  //t_box3 += anim_trans;
+  float dist_box3 = sdf_box(trans_pt(p, t_box3) * 1.0, vec3(3.0, 3.0, 3.0)) / 1.0;
   float dist = sect_op(dist_sph2, dist_box3);
+
+  //dist = dist_box3;
+
   return dist;
 }
 
@@ -225,7 +231,14 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
       t += dist2;
     }
     else {
-      t += dist;
+      //increment by smaller distance
+      if (dist < dist2) {
+        t += dist;
+      }
+      else {
+        t += dist2;
+      }
+      
     }
   
     if (t >= 1000.0) {
