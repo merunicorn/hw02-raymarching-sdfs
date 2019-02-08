@@ -83,6 +83,11 @@ float sdf_torus(vec3 p, vec2 t) {
   return length(q) - t.y;
 }
 
+float sdf_cylin( vec3 p, vec2 h) {
+  vec2 d = abs(vec2(length(p.xz),p.y)) - h;
+  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+}
+
 float union_op(float d1, float d2) {
   return min(d1, d2);
 }
@@ -134,49 +139,60 @@ vec3 rot_op(vec3 r, vec3 p) {
 }
 
 float cupSDF(vec3 p) {
-  vec3 anim_angle = vec3(0.0, 0.0, 0.0);
+  vec3 anim_angle = vec3(0.0, 10.0, 0.0);
   vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
   // apply rotation + translation to box point
   vec3 rot_box = vec3(0.0, 45.0, 60.0);
   rot_box += anim_angle;
-  vec3 p_box = rot_op(rot_box, p);
+  //vec3 p_box = rot_op(rot_box, p);
   vec3 t_box = vec3(0.5, 0.0, 0.0);
+  t_box += anim_trans;
+  vec3 p_box = trans_pt(p, t_box);
 
   // apply scale + translation to sphere
   vec3 t_sph = vec3(0.0, 0.5, 0.0);
-  //t_sph += anim_trans;
+  t_sph += anim_trans;
   float dist_sph = sdf_sphere(trans_pt(p, t_sph) * 1.0, 3.0) / 1.0;
 
   // create cup with sphere + box
   //vec3 p_sph_box = mod(p_box, vec3(1.0, 1.0, 1.0)) - 0.5 * vec3(1.0, 1.0, 1.0);
-  float dist_box = sdf_box(trans_pt(p_box, t_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
+  float dist_box = sdf_box(rot_op(rot_box, p_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
+  //float dist_box = sdf_box(trans_pt(p_box, t_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
   float dist_cup = sect_op(dist_box, dist_sph);
 
   // create cup handle with torus
   vec3 rot_torus = vec3(65.0, 0.0, 0.0);
   rot_torus += anim_angle;
-  vec3 p_torus = rot_op(rot_torus, p);
+  //vec3 p_torus = rot_op(rot_torus, p);
   vec3 t_tor = vec3(2.5, 0.0, -0.25);
-  //t_tor += anim_trans;
-  float dist_torus = sdf_torus(trans_pt(p_torus, t_tor) * 0.75, vec2(1.2, 0.2)) / 0.75;
+  t_tor += anim_trans;
+  vec3 p_torus = trans_pt(p, t_tor);
+  float dist_torus = sdf_torus(rot_op(rot_torus, p_torus) * 0.75, vec2(1.2, 0.2)) / 0.75;
 
   // inside of cup
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
-  //t_sph2 += anim_trans;
-  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.7) / 1.0;
-  vec3 t_box2 = vec3(3.1, 0.0, 0.0);
-  //t_box2 += anim_trans;
-  float dist_box2 = sdf_box(trans_pt(p_box, t_box2) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
-  vec3 t_box3 = vec3(1.7, 0.2, 0.2);
-  float dist_box3 = sdf_box(trans_pt(p_box, t_box3) * 0.8, vec3(0.2, 2.0, 2.0)) / 0.8;
+  t_sph2 += anim_trans;
+  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.8) / 1.0;
+  vec3 t_box2 = vec3(0.0, 0.0, 5.0);
+  t_box2 += anim_trans;
+  vec3 p_box2 = trans_pt(p, t_box2);
+  float dist_box2 = sdf_box(rot_op(rot_box, p_box2) * 0.3, vec3(1.2, 3.0, 3.0)) / 0.3;
+  vec3 t_box3 = vec3(0.0, 1.7, -0.8);
+  t_box3 += anim_trans;
+  vec3 p_box3 = trans_pt(p, t_box3);
+  float dist_box3 = sdf_box(rot_op(rot_box, p_box3) * 0.7, vec3(0.2, 2.5, 2.5)) / 0.7;
+  t_box3 += anim_trans;
 
   dist_cup = sect_op(dist_box, dist_sph);
   float dist = union_op(dist_cup, dist_torus);
   // cut out sphere from cup
   float dist_inside = sect_op(dist_sph2, dist_box2);
-  // flat bottom of cup
   dist = sub_op(dist_sph2, dist);
+  // flat bottom of cup
   dist_inside = sect_op(dist_inside, dist_box3);
+  dist = union_op(dist_inside, dist);
+
+  dist_inside = sect_op(dist_sph2, dist_box3);
   dist = union_op(dist_inside, dist);
 
   return dist;
@@ -186,29 +202,103 @@ float coffeeSDF(vec3 p) {
   vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
   // sphere
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
-  //t_sph2 += anim_trans;
-  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.7) / 1.0;
+  t_sph2 += anim_trans;
+  float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.8) / 1.0;
   // box
-  vec3 t_box3 = vec3(0.0, 4.6, 0.0);
-  //t_box3 += anim_trans;
+  vec3 t_box3 = vec3(0.0, 4.8, 0.0);
+  t_box3 += anim_trans;
   float dist_box3 = sdf_box(trans_pt(p, t_box3) * 1.0, vec3(3.0, 3.0, 3.0)) / 1.0;
   float dist = sect_op(dist_sph2, dist_box3);
 
-  //dist = dist_box3;
+  vec3 t_box4 = vec3(1.0, 0.5, -2.8);
+  t_box4 += anim_trans;
+  vec3 p_box4 = trans_pt(p, t_box4);
+  vec3 rot_box4 = vec3(0.0, 55.0, 60.0);
+  float dist_box4 = sdf_box(rot_op(rot_box4, p_box4), vec3(1.0, 4.0, 4.0));
 
   return dist;
 }
 
-vec3 estNormal(vec3 p) {
+float charSDF(vec3 p) {
+  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
+  vec3 anim_rot = vec3(0.0, 0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)));
+
+  // char head
+  vec3 t_sph2 = vec3(-0.5, 1.8, 0.0);
+  t_sph2 += anim_trans;
+  float dist_head = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 0.4) / 1.0;
+
+  // char arms
+  vec3 t_arm1 = vec3(0.1, 2.0, 0.0);
+  vec3 r_arm1 = vec3(0.0, 0.0, 35.0);
+  t_arm1 += anim_trans;
+  vec3 p_arm1 = trans_pt(p, t_arm1);
+  float dist_arm1 = sdf_cylin(rot_op(r_arm1, p_arm1), vec2(0.08, 0.7));
+  vec3 t_arm2 = vec3(-1.1, 2.0, 0.0);
+  vec3 r_arm2 = vec3(0.0, 0.0, -35.0);
+  t_arm2 += anim_trans;
+  vec3 p_arm2 = trans_pt(p, t_arm2);
+  float dist_arm2 = sdf_cylin(rot_op(r_arm2, p_arm2), vec2(0.08, 0.7));
+
+  float dist = union_op(dist_head, dist_arm1);
+  dist = union_op(dist, dist_arm2);
+
+  return dist;
+}
+
+float charEyeSDF(vec3 p) {
+  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
+  
+  // char eyes 
+  vec3 t_sph1 = vec3(-0.3, 1.5, 0.3);
+  t_sph1 += anim_trans;
+  float dist_eye1 = sdf_sphere(trans_pt(p, t_sph1), 0.05);
+  vec3 t_sph2 = vec3(-0.7, 1.5, 0.3);
+  t_sph2 += anim_trans;
+  float dist_eye2 = sdf_sphere(trans_pt(p, t_sph2), 0.05);
+
+  //char mouth
+  vec3 t_tor = vec3(-0.5, 1.5, 0.5);
+  t_tor += anim_trans;
+  vec3 p_tor = trans_pt(p, t_tor);
+  vec3 r_tor = vec3(65.0, 0.0, 0.0);
+  float dist_tor = sdf_torus(rot_op(r_tor, p_tor), vec2(0.08, 0.02));
+  vec3 t_sph3 = vec3(-0.5, 1.65, 0.3);
+  t_sph3 += anim_trans;
+  float dist_sph3 = sdf_sphere(trans_pt(p, t_sph3), 0.25);
+
+  float dist = union_op(dist_eye1, dist_eye2);
+  float dist_mouth = sect_op(dist_sph3, dist_tor);
+  dist = union_op(dist, dist_mouth);
+  return dist;
+}
+
+vec3 estNormalCup(vec3 p) {
   float eps = 0.001;
-  vec3 nor = vec3(cupSDF(vec3(p.x + eps, p.y, p.z)) - cupSDF(vec3(p.x - eps, p.y, p.z)),
+  vec3 nor_c = vec3(cupSDF(vec3(p.x + eps, p.y, p.z)) - cupSDF(vec3(p.x - eps, p.y, p.z)),
                   cupSDF(vec3(p.x, p.y + eps, p.z)) - cupSDF(vec3(p.x, p.y - eps, p.z)),
                   cupSDF(vec3(p.x, p.y, p.z + eps)) - cupSDF(vec3(p.x, p.y, p.z - eps)));
-  return normalize(nor);
+  return normalize(nor_c);
+}
+
+vec3 estNormalCoffee(vec3 p) {
+  float eps = 0.001;
+  vec3 nor_co = vec3(coffeeSDF(vec3(p.x + eps, p.y, p.z)) - coffeeSDF(vec3(p.x - eps, p.y, p.z)),
+                  coffeeSDF(vec3(p.x, p.y + eps, p.z)) - coffeeSDF(vec3(p.x, p.y - eps, p.z)),
+                  coffeeSDF(vec3(p.x, p.y, p.z + eps)) - coffeeSDF(vec3(p.x, p.y, p.z - eps)));
+  return normalize(nor_co);
+}
+
+vec3 estNormalChar(vec3 p) {
+  float eps = 0.001;
+  vec3 nor_ch = vec3(charSDF(vec3(p.x + eps, p.y, p.z)) - charSDF(vec3(p.x - eps, p.y, p.z)),
+                  charSDF(vec3(p.x, p.y + eps, p.z)) - charSDF(vec3(p.x, p.y - eps, p.z)),
+                  charSDF(vec3(p.x, p.y, p.z + eps)) - charSDF(vec3(p.x, p.y, p.z - eps)));
+  return normalize(nor_ch);
 }
 
 vec2 rayMarch(vec3 eye, vec3 dir) { 
-  //rayMarch returns (t, object id)
+  // rayMarch returns (t, object id)
   float t = 0.01;
   int max_steps = 1000;
   for (int i = 0; i < max_steps; i++) {
@@ -216,33 +306,48 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
 
     float dist = cupSDF(p);
     float dist2 = coffeeSDF(p);
-    nor = estNormal(p);
+    float dist3 = charSDF(p);
+    float dist4 = charEyeSDF(p);
+    nor = estNormalCup(p);
 
     if (dist < 0.00001) {
-      //at cup surface
-      return vec2(t, 1.0);
-      //move along ray
+      // at cup surface
+      nor = estNormalCup(p);
+      return vec2(t, 1.0);  
+      // move along ray
       t += dist;
     }
     else if (dist2 < 0.00001) {
-      //at coffee surface
+      // at coffee surface
+      nor = estNormalCoffee(p);
       return vec2(t, 2.0);
-      //move along ray
+      // move along ray
       t += dist2;
     }
+    else if (dist3 < 0.00001) {
+      // at character surface
+      // flat shading; no nor set
+      return vec2(t, 3.0);
+      // move along ray
+      t += dist3;
+    }
+    else if (dist4 < 0.00001) {
+      // at character eye surface
+      // flat shading; no nor set
+      return vec2(t, 4.0);
+      // move alone ray
+      t += dist4;
+    }
     else {
-      //increment by smaller distance
-      if (dist < dist2) {
-        t += dist;
-      }
-      else {
-        t += dist2;
-      }
-      
+      // increment by smaller distance
+      float dist_min = min(dist, dist2);
+      dist_min = min(dist_min, dist3);
+      dist_min = min(dist_min, dist4);
+      t += dist_min;
     }
   
     if (t >= 1000.0) {
-      //end
+      // end
       return vec2(t, 0.0);
     }
   }
@@ -261,6 +366,14 @@ float shadow(vec3 origin, vec3 dir, float mint, float maxt) {
   return 1.0;
 }
 
+vec3 colorConvert(vec3 rgb) {
+  vec3 new_color;
+  new_color[0] = (rgb[0] / 255.0);
+  new_color[1] = (rgb[1] / 255.0);
+  new_color[2] = (rgb[2] / 255.0);
+  return new_color;
+}
+
 void main() {
 
   // convert to NDC screen coors
@@ -272,20 +385,27 @@ void main() {
 
   vec2 march = rayMarch(u_Eye, dir);
 
-  //float shadow_test = shadow(u_Eye, light, 0.01, 20.0);
-  //vec4 shadow_col = vec4(vec3(shadow_test, shadow_test, shadow_test), 1.0);
-
   if (march[0] < 1000.0) {
-    // hit object
-    // out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
-    
+    // Hit object
+    vec4 diffuseColor;
     if (march[1] == 1.0) {
-    // Cup ID
-    //vec4 diffuseColor = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
-    vec4 diffuseColor = vec4(vec3(0.65, 0.65, 1.0), 1.0);
-    //vec4 diffuseColor = vec4(vec3(0.65, 0.65 + (0.05 * sin(u_Time * 3.14159 * 0.01)), 1.0), 1.0);
-    
-    // Calculate the diffuse term for shading
+      // Hit cup
+      diffuseColor = vec4(colorConvert(vec3(194.0, 187.0, 240.0)), 1.0);
+    }
+    else if (march[1] == 2.0) {
+      // Hit coffee
+      diffuseColor = vec4(colorConvert(vec3(4.0, 150.0, 255.0)), 1.0);
+    }
+    else if (march[1] == 3.0) {
+      // Hit char
+      diffuseColor = vec4(colorConvert(vec3(220.0, 126.0, 211.0)), 1.0);
+    }
+    else if (march[1] == 4.0) {
+      // Hit char eye
+      diffuseColor = vec4(colorConvert(vec3(255.0, 223.0, 109.0)), 1.0);
+    }
+
+    // Calculate diffuse term for shading
     float diffuseTerm = dot(normalize(nor), normalize(light));
     // Avoid negative lighting values
     diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
@@ -302,16 +422,8 @@ void main() {
 
     // Compute final shaded color
     out_Col = vec4(diffuseColor.rgb * (lightIntensity + specularIntensity), 1.0);
-    }
-    else if (march[1] == 2.0) {
-      // Coffee ID; change color
-      out_Col = vec4(vec3(0.3, 0.1, 0.2), 1.0);
-    }
   }
   else {
-    // No valid ID; no intersection / set bg color
-    //out_Col = vec4(vec3(0.2, 0.2, 0.2), 1.0);
-    //out_Col = vec4(0.5 * (fs_Pos + vec2(1.0)), 0.5 * (sin(u_Time * 3.14159 * 0.01) + 1.0), 1.0);
     out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
   }
 
