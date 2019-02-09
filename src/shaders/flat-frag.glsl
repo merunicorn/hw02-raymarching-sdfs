@@ -17,15 +17,6 @@ float worl;
 vec3 anim_trans;
 vec3 anim_angle;
 
-vec3 bbox_root_min;
-vec3 bbox_root_max;
-vec3 bbox_cup_min;
-vec3 bbox_cup_max;
-vec3 bbox_handle_min;
-vec3 bbox_handle_max;
-vec3 bbox_char_min;
-vec3 bbox_char_max;
-
 vec3 rayCast(vec4 s) {
     // multiply by far clip plane
     float far_clip = 1000.0;
@@ -87,7 +78,6 @@ vec2 random2(vec2 p, vec2 seed) {
   return fract(sin(vec2(dot(p + seed, vec2(311.7, 127.1)), dot(p + seed, vec2(269.5, 183.3)))) * 85734.3545);
 }
 
-//Worley Noise (Adam's code)
 float WorleyNoise(vec2 uv) {
     // Tile the space
     vec2 uvInt = floor(uv);
@@ -186,29 +176,27 @@ vec3 rot_op(vec3 r, vec3 p) {
 float cupSDF(vec3 p) {
   // apply rotation + translation to box point
   vec3 rot_box = vec3(0.0, 55.0, 60.0);
-  //rot_box += anim_angle;
   vec3 t_box = vec3(0.5, 0.0, 0.0);
   t_box += anim_trans;
   vec3 p_box = trans_pt(p, t_box);
 
-  // apply scale + translation to sphere
+  // apply translation to sphere
   vec3 t_sph = vec3(0.0, 0.5, 0.0);
   t_sph += anim_trans;
   float dist_sph = sdf_sphere(trans_pt(p, t_sph), 3.0);
 
-  // create cup with sphere + box
+  // create basic cup shape with sphere + box
   float dist_box = sdf_box(rot_op(rot_box, p_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
   float dist_cup = sect_op(dist_box, dist_sph);
 
   // create cup handle with torus
   vec3 rot_torus = vec3(65.0, 0.0, 0.0);
-  //vec3 p_torus = rot_op(rot_torus, p);
   vec3 t_tor = vec3(2.5, 0.0, -0.25);
   t_tor += anim_trans;
   vec3 p_torus = trans_pt(p, t_tor);
   float dist_torus = sdf_torus(rot_op(rot_torus, p_torus) * 0.75, vec2(1.2, 0.2)) / 0.75;
 
-  // inside of cup
+  // carve out inside of cup
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
   t_sph2 += anim_trans;
   float dist_sph2 = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 2.8) / 1.0;
@@ -220,17 +208,14 @@ float cupSDF(vec3 p) {
   t_box3 += anim_trans;
   vec3 p_box3 = trans_pt(p, t_box3);
   float dist_box3 = sdf_box(rot_op(rot_box, p_box3) * 0.7, vec3(0.2, 2.5, 2.5)) / 0.7;
-  t_box3 += anim_trans;
 
   dist_cup = sect_op(dist_box, dist_sph);
+  // connect cup to handle
   float dist = union_op(dist_cup, dist_torus);
-  // cut out sphere from cup
+  // carve out inside of cup
   float dist_inside = sect_op(dist_sph2, dist_box2);
   dist = sub_op(dist_sph2, dist);
-  // flat bottom of cup
-  dist_inside = sect_op(dist_inside, dist_box3);
-  dist = union_op(dist_inside, dist);
-
+  // add in bottom of cup
   dist_inside = sect_op(dist_sph2, dist_box3);
   dist = union_op(dist_inside, dist);
 
@@ -238,6 +223,7 @@ float cupSDF(vec3 p) {
 }
 
 float coffeeSDF(vec3 p) {
+  // SDF for the liquid inside cup
   // sphere
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
   t_sph2 += anim_trans;
@@ -248,13 +234,8 @@ float coffeeSDF(vec3 p) {
   float dist_box3 = sdf_box(trans_pt(p, t_box3) * 1.0, vec3(3.0, 3.0, 3.0)) / 1.0;
   float dist = sect_op(dist_sph2, dist_box3);
 
+  // apply worley noise for water effect
   worl = WorleyNoise(2.0 * p.xz);
-
-  vec3 t_box4 = vec3(1.0, 0.5, -2.8);
-  t_box4 += anim_trans;
-  vec3 p_box4 = trans_pt(p, t_box4);
-  vec3 rot_box4 = vec3(0.0, 55.0, 60.0);
-  float dist_box4 = sdf_box(rot_op(rot_box4, p_box4), vec3(1.0, 4.0, 4.0));
 
   return dist;
 }
@@ -265,10 +246,6 @@ float charSDF(vec3 p) {
   t_sph2 += anim_trans;
   vec3 p_sph2 = trans_pt(p, t_sph2);
   float dist_head = sdf_sphere(p_sph2 * 1.0, 0.4) / 1.0;
-  vec3 bbox_char_head_min = p - vec3(0.4);
-  vec3 bbox_char_head_max = p + vec3(0.4);
-  bbox_char_min = bbox_char_head_min;
-  bbox_char_max = bbox_char_head_max;
 
   // char arms
   vec3 t_arm1 = vec3(0.1, 2.0, 0.0);
@@ -284,6 +261,7 @@ float charSDF(vec3 p) {
   r_arm2 += anim_angle;
   float dist_arm2 = sdf_cylin(rot_op(r_arm2, p_arm2), vec2(0.08, 0.7));
 
+  // connect head and arms into same SDF
   float dist = union_op(dist_head, dist_arm1);
   dist = union_op(dist, dist_arm2);
 
@@ -310,13 +288,17 @@ float charEyeSDF(vec3 p) {
   t_sph3 += anim_trans;
   float dist_sph3 = sdf_sphere(trans_pt(p, t_sph3), 0.25);
 
+  // connect eyes to same SDF
   float dist = union_op(dist_eye1, dist_eye2);
+  // create mouth by taking part of torus
   float dist_mouth = sect_op(dist_sph3, dist_tor);
+  // combine eyes and mouth to same SDF
   dist = union_op(dist, dist_mouth);
   return dist;
 }
 
 vec3 estNormalCup(vec3 p) {
+  // find normal of cup points
   float eps = 0.001;
   vec3 nor_c = vec3(cupSDF(vec3(p.x + eps, p.y, p.z)) - cupSDF(vec3(p.x - eps, p.y, p.z)),
                   cupSDF(vec3(p.x, p.y + eps, p.z)) - cupSDF(vec3(p.x, p.y - eps, p.z)),
@@ -325,19 +307,12 @@ vec3 estNormalCup(vec3 p) {
 }
 
 vec3 estNormalCoffee(vec3 p) {
+  // find normal of liquid points
   float eps = 0.001;
   vec3 nor_co = vec3(coffeeSDF(vec3(p.x + eps, p.y, p.z)) - coffeeSDF(vec3(p.x - eps, p.y, p.z)),
                   coffeeSDF(vec3(p.x, p.y + eps, p.z)) - coffeeSDF(vec3(p.x, p.y - eps, p.z)),
                   coffeeSDF(vec3(p.x, p.y, p.z + eps)) - coffeeSDF(vec3(p.x, p.y, p.z - eps)));
   return normalize(nor_co);
-}
-
-vec3 estNormalChar(vec3 p) {
-  float eps = 0.001;
-  vec3 nor_ch = vec3(charSDF(vec3(p.x + eps, p.y, p.z)) - charSDF(vec3(p.x - eps, p.y, p.z)),
-                  charSDF(vec3(p.x, p.y + eps, p.z)) - charSDF(vec3(p.x, p.y - eps, p.z)),
-                  charSDF(vec3(p.x, p.y, p.z + eps)) - charSDF(vec3(p.x, p.y, p.z - eps)));
-  return normalize(nor_ch);
 }
 
 vec2 rayMarch(vec3 eye, vec3 dir) { 
@@ -384,7 +359,7 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
       t += dist4;
     }
     else {
-      // increment by smaller distance
+      // increment by smallest distance
       float dist_min = min(dist, dist2);
       dist_min = min(dist_min, dist3);
       dist_min = min(dist_min, dist4);
@@ -401,6 +376,7 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
 }
 
 bool rayBoxIntersection(vec3 origin, vec3 dir, vec3 min, vec3 max) {
+  // check intersection of ray with cube for bounding box purposes
   float near = -1.0 * (1.0 / 0.0);
   float far = (1.0 / 0.0);
   float t0;
@@ -433,17 +409,6 @@ bool rayBoxIntersection(vec3 origin, vec3 dir, vec3 min, vec3 max) {
   }
 }
 
-float shadow(vec3 origin, vec3 dir, float mint, float maxt) {
-  for(float t = mint; t < maxt;) {
-    float h = rayMarch(u_Eye, dir)[0];
-    if(h < 0.001) {
-      return 0.0;
-    }
-    t += h;
-  }
-  return 1.0;
-}
-
 float ease_in_out_quadratic(float t) {
   if (t < 0.5) {
     return (t * t * 4.0) / 2.0;
@@ -466,7 +431,6 @@ vec3 colorConvert(vec3 rgb) {
 }
 
 void main() {
-
   // convert to NDC screen coors
   vec4 s = vec4(-1.0 * (((gl_FragCoord.x / u_Dimensions.x) * 2.0) - 1.0),
                 -1.0 * (1.0 - ((gl_FragCoord.y / u_Dimensions.y) * 2.0)), 1.0, 1.0);
@@ -481,6 +445,7 @@ void main() {
     anim_angle = vec3(0.0);
   }
   else {
+    // animate character arms
     anim_angle = vec3(0.0, 0.0, (ease_linear(time, 0.0, 5.0, 3.0)));
     anim_angle[2] = mod(anim_angle[2], 120.0);
     if (anim_angle[2] > 60.0) {
@@ -488,10 +453,9 @@ void main() {
     }
   }
   
-  vec3 center = vec3(0.0,0.0,0.0);
-
   // set up bounding box hierarchy
   // bounds for main sphere for cup
+  vec3 center = vec3(0.0,0.0,0.0);
   vec3 box_cup_sph_min = center - vec3(0.0, 0.5, 0.0) - vec3(3.0);
   vec3 box_cup_sph_max = center - vec3(0.0, 0.5, 0.0) + vec3(3.0);
   box_cup_sph_min -= anim_trans;
@@ -542,10 +506,6 @@ void main() {
           // Hit char features
           diffuseColor = vec4(colorConvert(vec3(255.0, 223.0, 109.0)), 1.0);
         }
-        else if (march[1] == 10.0) {
-          // outside bounding box
-          diffuseColor = vec4(0.0,0.0,0.0,1.0);
-        }
 
         // Calculate diffuse term for shading
         float diffuseTerm = dot(normalize(nor), normalize(light));
@@ -565,14 +525,17 @@ void main() {
         out_Col = vec4(diffuseColor.rgb * (lightIntensity + specularIntensity), 1.0);
       }
       else {
+        // bg color
         out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
       }
     }
     else {
+      // bg color
       out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
     }
   }
   else {
+    // bg color
     out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
   }
 }

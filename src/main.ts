@@ -93,9 +93,6 @@ function main() {
       // update color
       prevColor = controls.color;
     }
-    //if (controls.charAnimated == true) {
-      // animate true
-    //}
 
     renderer.render(camera, flat, [
       square,
