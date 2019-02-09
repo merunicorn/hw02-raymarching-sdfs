@@ -19,11 +19,14 @@ Detailed Explanation:
     - Steps:
         - Cup
             - Sphere intersecting with Box to get the hemisphere cup shape
+            ![](hemisphere.png)
             - Torus to get the handle shape
             - Subtract sphere to hollow out the cup
             - Add in a slice of a Sphere intersecting with Box to get a flat bottom for the cup
+            ![](bottom.png)
         - Liquid
             - Sphere (same size as the one subtracted from cup) intersecting with Box
+            ![](liquid_box.png)
         - Character
             - Sphere union’ed with smaller Spheres for head
             - Cylinders for arms
@@ -42,6 +45,7 @@ Detailed Explanation:
         - For bounding box of handle, I similarly used the radius to calculate it
         - Grouped both these major bounding boxes into a root bounding box
         - All my other geometry was already encompassed within the “cup” bounding box, so my hierarchy was pretty simple
+        ![](bounding_box.png)
 - Toolbox functions
     - Used code from the slides to:
         - add an ease in/out movement to the cup position bobbing animation
