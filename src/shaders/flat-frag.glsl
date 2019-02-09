@@ -10,6 +10,19 @@ out vec4 out_Col;
 
 vec3 light;
 vec3 nor;
+float worl;
+
+vec3 anim_trans;
+vec3 anim_angle;
+
+vec3 bbox_root_min;
+vec3 bbox_root_max;
+vec3 bbox_cup_min;
+vec3 bbox_cup_max;
+vec3 bbox_handle_min;
+vec3 bbox_handle_max;
+vec3 bbox_char_min;
+vec3 bbox_char_max;
 
 vec3 rayCast(vec4 s) {
     // multiply by far clip plane
@@ -66,6 +79,36 @@ vec3 rayCast(vec4 s) {
     light = vec3((inverse(view) * vec4(0.0, 0.0, 0.0, 1.0)) - vec4(fs_Pos, 1.0, 1.0));
 
     return dir;
+}
+
+vec2 random2(vec2 p, vec2 seed) {
+  return fract(sin(vec2(dot(p + seed, vec2(311.7, 127.1)), dot(p + seed, vec2(269.5, 183.3)))) * 85734.3545);
+}
+
+//Worley Noise (Adam's code)
+float WorleyNoise(vec2 uv) {
+    // Tile the space
+    vec2 uvInt = floor(uv);
+    vec2 uvFract = fract(uv);
+
+    float minDist = 1.0; // Minimum distance initialized to max.
+
+    // Search all neighboring cells and this cell for their point
+    for(int y = -1; y <= 1; y++) {
+        for(int x = -1; x <= 1; x++) {
+            vec2 neighbor = vec2(float(x), float(y));
+
+            // Random point inside current neighboring cell
+            vec2 point = random2(uvInt + neighbor, vec2(10.0));
+
+            // Compute the distance b/t the point and the fragment
+            // Store the min dist thus far
+            vec2 diff = neighbor + point - uvFract;
+            float dist = length(diff);
+            minDist = min(minDist, dist);
+        }
+    }
+    return minDist;
 }
 
 float sdf_sphere(vec3 p, float rad) {
@@ -139,12 +182,9 @@ vec3 rot_op(vec3 r, vec3 p) {
 }
 
 float cupSDF(vec3 p) {
-  vec3 anim_angle = vec3(0.0, 10.0, 0.0);
-  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
   // apply rotation + translation to box point
   vec3 rot_box = vec3(0.0, 45.0, 60.0);
   rot_box += anim_angle;
-  //vec3 p_box = rot_op(rot_box, p);
   vec3 t_box = vec3(0.5, 0.0, 0.0);
   t_box += anim_trans;
   vec3 p_box = trans_pt(p, t_box);
@@ -152,12 +192,10 @@ float cupSDF(vec3 p) {
   // apply scale + translation to sphere
   vec3 t_sph = vec3(0.0, 0.5, 0.0);
   t_sph += anim_trans;
-  float dist_sph = sdf_sphere(trans_pt(p, t_sph) * 1.0, 3.0) / 1.0;
+  float dist_sph = sdf_sphere(trans_pt(p, t_sph), 3.0);
 
   // create cup with sphere + box
-  //vec3 p_sph_box = mod(p_box, vec3(1.0, 1.0, 1.0)) - 0.5 * vec3(1.0, 1.0, 1.0);
   float dist_box = sdf_box(rot_op(rot_box, p_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
-  //float dist_box = sdf_box(trans_pt(p_box, t_box) * 0.8, vec3(1.2, 3.0, 3.0)) / 0.8;
   float dist_cup = sect_op(dist_box, dist_sph);
 
   // create cup handle with torus
@@ -199,7 +237,6 @@ float cupSDF(vec3 p) {
 }
 
 float coffeeSDF(vec3 p) {
-  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
   // sphere
   vec3 t_sph2 = vec3(0.0, 0.5, 0.0);
   t_sph2 += anim_trans;
@@ -209,6 +246,8 @@ float coffeeSDF(vec3 p) {
   t_box3 += anim_trans;
   float dist_box3 = sdf_box(trans_pt(p, t_box3) * 1.0, vec3(3.0, 3.0, 3.0)) / 1.0;
   float dist = sect_op(dist_sph2, dist_box3);
+
+  worl = WorleyNoise(2.0 * p.xz);
 
   vec3 t_box4 = vec3(1.0, 0.5, -2.8);
   t_box4 += anim_trans;
@@ -220,13 +259,14 @@ float coffeeSDF(vec3 p) {
 }
 
 float charSDF(vec3 p) {
-  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
-  vec3 anim_rot = vec3(0.0, 0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)));
-
   // char head
   vec3 t_sph2 = vec3(-0.5, 1.8, 0.0);
   t_sph2 += anim_trans;
   float dist_head = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 0.4) / 1.0;
+  vec3 bbox_char_head_min = p - vec3(0.4);
+  vec3 bbox_char_head_max = p + vec3(0.4);
+  bbox_char_min = bbox_char_head_min;
+  bbox_char_max = bbox_char_head_max;
 
   // char arms
   vec3 t_arm1 = vec3(0.1, 2.0, 0.0);
@@ -246,9 +286,7 @@ float charSDF(vec3 p) {
   return dist;
 }
 
-float charEyeSDF(vec3 p) {
-  vec3 anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
-  
+float charEyeSDF(vec3 p) { 
   // char eyes 
   vec3 t_sph1 = vec3(-0.3, 1.5, 0.3);
   t_sph1 += anim_trans;
@@ -301,13 +339,15 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
   // rayMarch returns (t, object id)
   float t = 0.01;
   int max_steps = 1000;
+  vec3 p = eye + t * dir;
   for (int i = 0; i < max_steps; i++) {
-    vec3 p = eye + t * dir;
+    p = eye + t * dir;
 
     float dist = cupSDF(p);
     float dist2 = coffeeSDF(p);
     float dist3 = charSDF(p);
     float dist4 = charEyeSDF(p);
+
     nor = estNormalCup(p);
 
     if (dist < 0.00001) {
@@ -355,6 +395,39 @@ vec2 rayMarch(vec3 eye, vec3 dir) {
   return vec2(t, 0.0);
 }
 
+bool rayBoxIntersection(vec3 origin, vec3 dir, vec3 min, vec3 max) {
+  float near = -1.0 * (1.0 / 0.0);
+  float far = (1.0 / 0.0);
+  float t0;
+  float t1;
+  for (int i = 0; i < 3; i++) {
+    if (dir[i] == 0.0) {
+      if (origin[i] < min[i] || origin[i] > max[i]) {
+        return false;
+      }
+    }
+    t0 = (min[i] - origin[i]) / dir[i];
+    t1 = (max[i] - origin[i]) / dir[i];
+    if (t0 > t1) {
+      float temp = t0;
+      t0 = t1;
+      t1 = temp;
+    }
+    if (t0 > near) {
+      near = t0;
+    }
+    if (t1 < far) {
+      far = t1;
+    }
+  }
+  if (near > far) {
+    return false;
+  }
+  else {
+    return true;
+  }
+}
+
 float shadow(vec3 origin, vec3 dir, float mint, float maxt) {
   for(float t = mint; t < maxt;) {
     float h = rayMarch(u_Eye, dir)[0];
@@ -364,6 +437,15 @@ float shadow(vec3 origin, vec3 dir, float mint, float maxt) {
     t += h;
   }
   return 1.0;
+}
+
+float ease_in_out_quadratic(float t) {
+  if (t < 0.5) {
+    return (t * t * 4.0) / 2.0;
+  }
+  else {
+    return 1.0 - (4.0 - (8.0 * t) + (t * t)) / 2.0;
+  }
 }
 
 vec3 colorConvert(vec3 rgb) {
@@ -381,52 +463,98 @@ void main() {
                 -1.0 * (1.0 - ((gl_FragCoord.y / u_Dimensions.y) * 2.0)), 1.0, 1.0);
   vec3 dir = rayCast(s);
 
+  // set up global animation values
+  anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
+  anim_angle = vec3(0.0, 10.0, 0.0);
+
   float shadow_test = shadow(u_Eye, light, 0.01, 20.0);
 
-  vec2 march = rayMarch(u_Eye, dir);
+  vec3 center = vec3(0.0,0.0,0.0);
 
-  if (march[0] < 1000.0) {
-    // Hit object
-    vec4 diffuseColor;
-    if (march[1] == 1.0) {
-      // Hit cup
-      diffuseColor = vec4(colorConvert(vec3(194.0, 187.0, 240.0)), 1.0);
-    }
-    else if (march[1] == 2.0) {
-      // Hit coffee
-      diffuseColor = vec4(colorConvert(vec3(4.0, 150.0, 255.0)), 1.0);
-    }
-    else if (march[1] == 3.0) {
-      // Hit char
-      diffuseColor = vec4(colorConvert(vec3(220.0, 126.0, 211.0)), 1.0);
-    }
-    else if (march[1] == 4.0) {
-      // Hit char eye
-      diffuseColor = vec4(colorConvert(vec3(255.0, 223.0, 109.0)), 1.0);
-    }
+  // set up bounding box hierarchy
+  // bounds for main sphere for cup
+  vec3 box_cup_sph_min = center - vec3(0.0, 0.5, 0.0) - vec3(3.0);
+  vec3 box_cup_sph_max = center - vec3(0.0, 0.5, 0.0) + vec3(3.0);
+  box_cup_sph_min -= anim_trans;
+  box_cup_sph_max -= anim_trans;
 
-    // Calculate diffuse term for shading
-    float diffuseTerm = dot(normalize(nor), normalize(light));
-    // Avoid negative lighting values
-    diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
-    diffuseTerm *= shadow_test;
-    float ambientTerm = 0.2;
-    float lightIntensity = diffuseTerm + ambientTerm;
+  // bounds for torus handle
+  vec3 box_cup_tor_min = center - vec3(2.5, 0.0, -0.25) - vec3(1.2);
+  box_cup_tor_min *= (1.0 / 0.75);
+  vec3 box_cup_tor_max = center - vec3(2.5, 0.0, -0.25) + vec3(1.2);
+  box_cup_tor_max *= (1.0 / 0.75);
+  box_cup_tor_min -= anim_trans;
+  box_cup_tor_max -= anim_trans;
 
-    // Implement specular light
-    vec4 H;
-    for (int i = 0; i < 4; i++) {
-        H[i] = (light[i] + u_Eye[i]) / 2.0;
+  // root contains both cup box and handle box
+  vec3 box_min = min(box_cup_sph_min, box_cup_tor_min);
+  vec3 box_max = max(box_cup_sph_max, box_cup_tor_max);
+
+  bool bound_test = rayBoxIntersection(u_Eye, dir, box_min, box_max);
+  if (bound_test) {
+    // in root bounding box
+    bool bound_test_cup = rayBoxIntersection(u_Eye, dir, box_cup_sph_min, box_cup_sph_max);
+    bool bound_test_tor = rayBoxIntersection(u_Eye, dir, box_cup_tor_min, box_cup_tor_max);
+    if (bound_test_cup || bound_test_tor) {
+      // in cup or handle bounding boxes
+      // rayMarch test
+      vec2 march = rayMarch(u_Eye, dir);
+
+      if (march[0] < 1000.0) {
+        // Hit object
+        vec4 diffuseColor;
+        if (march[1] == 1.0) {
+          // Hit cup
+          diffuseColor = vec4(colorConvert(vec3(194.0, 187.0, 240.0)), 1.0);
+        }
+        else if (march[1] == 2.0) {
+          // Hit coffee
+          diffuseColor = vec4(worl);
+          diffuseColor += vec4(colorConvert(vec3(0.0, 100.0, 200.0)), 1.0);
+          while (diffuseColor[2] < 235.0) {
+            diffuseColor += vec4(colorConvert(vec3(0.0, 100.0, 200.0)), 1.0);
+          }
+        }
+        else if (march[1] == 3.0) {
+          // Hit char
+          diffuseColor = vec4(colorConvert(vec3(220.0, 126.0, 211.0)), 1.0);   
+        }
+        else if (march[1] == 4.0) {
+          // Hit char eye
+          diffuseColor = vec4(colorConvert(vec3(255.0, 223.0, 109.0)), 1.0);
+        }
+        else if (march[1] == 10.0) {
+          // outside bounding box
+          diffuseColor = vec4(0.0,0.0,0.0,1.0);
+        }
+
+        // Calculate diffuse term for shading
+        float diffuseTerm = dot(normalize(nor), normalize(light));
+        // Avoid negative lighting values
+        diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
+        diffuseTerm *= shadow_test;
+        float ambientTerm = 0.2;
+        float lightIntensity = diffuseTerm + ambientTerm;
+
+        // Implement specular light
+        vec4 H;
+        for (int i = 0; i < 4; i++) {
+            H[i] = (light[i] + u_Eye[i]) / 2.0;
+        }
+        float specularIntensity = max(pow(dot(normalize(H), normalize(vec4(nor,1.0))), 1.5), 0.0);
+
+        // Compute final shaded color
+        out_Col = vec4(diffuseColor.rgb * (lightIntensity + specularIntensity), 1.0);
+      }
+      else {
+        out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
+      }
     }
-    float specularIntensity = max(pow(dot(normalize(H), normalize(vec4(nor,1.0))), 1.5), 0.0);
-
-    // Compute final shaded color
-    out_Col = vec4(diffuseColor.rgb * (lightIntensity + specularIntensity), 1.0);
+    else {
+      out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
+    }
   }
   else {
     out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
   }
-
-  //out_Col = vec4(0.5 * (dir + vec3(1.0, 1.0, 1.0)), 1.0);
-  //out_Col = vec4(0.5 * (fs_Pos + vec2(1.0)), 0.5 * (sin(u_Time * 3.14159 * 0.01) + 1.0), 1.0);
 }
