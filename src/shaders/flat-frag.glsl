@@ -4,6 +4,8 @@ precision highp float;
 uniform vec3 u_Eye, u_Ref, u_Up;
 uniform vec2 u_Dimensions;
 uniform float u_Time;
+uniform vec4 u_Color;
+uniform float u_Anim;
 
 in vec2 fs_Pos;
 out vec4 out_Col;
@@ -183,8 +185,8 @@ vec3 rot_op(vec3 r, vec3 p) {
 
 float cupSDF(vec3 p) {
   // apply rotation + translation to box point
-  vec3 rot_box = vec3(0.0, 45.0, 60.0);
-  rot_box += anim_angle;
+  vec3 rot_box = vec3(0.0, 55.0, 60.0);
+  //rot_box += anim_angle;
   vec3 t_box = vec3(0.5, 0.0, 0.0);
   t_box += anim_trans;
   vec3 p_box = trans_pt(p, t_box);
@@ -200,7 +202,6 @@ float cupSDF(vec3 p) {
 
   // create cup handle with torus
   vec3 rot_torus = vec3(65.0, 0.0, 0.0);
-  rot_torus += anim_angle;
   //vec3 p_torus = rot_op(rot_torus, p);
   vec3 t_tor = vec3(2.5, 0.0, -0.25);
   t_tor += anim_trans;
@@ -262,7 +263,8 @@ float charSDF(vec3 p) {
   // char head
   vec3 t_sph2 = vec3(-0.5, 1.8, 0.0);
   t_sph2 += anim_trans;
-  float dist_head = sdf_sphere(trans_pt(p, t_sph2) * 1.0, 0.4) / 1.0;
+  vec3 p_sph2 = trans_pt(p, t_sph2);
+  float dist_head = sdf_sphere(p_sph2 * 1.0, 0.4) / 1.0;
   vec3 bbox_char_head_min = p - vec3(0.4);
   vec3 bbox_char_head_max = p + vec3(0.4);
   bbox_char_min = bbox_char_head_min;
@@ -273,11 +275,13 @@ float charSDF(vec3 p) {
   vec3 r_arm1 = vec3(0.0, 0.0, 35.0);
   t_arm1 += anim_trans;
   vec3 p_arm1 = trans_pt(p, t_arm1);
+  r_arm1 += anim_angle;
   float dist_arm1 = sdf_cylin(rot_op(r_arm1, p_arm1), vec2(0.08, 0.7));
   vec3 t_arm2 = vec3(-1.1, 2.0, 0.0);
   vec3 r_arm2 = vec3(0.0, 0.0, -35.0);
   t_arm2 += anim_trans;
   vec3 p_arm2 = trans_pt(p, t_arm2);
+  r_arm2 += anim_angle;
   float dist_arm2 = sdf_cylin(rot_op(r_arm2, p_arm2), vec2(0.08, 0.7));
 
   float dist = union_op(dist_head, dist_arm1);
@@ -290,7 +294,8 @@ float charEyeSDF(vec3 p) {
   // char eyes 
   vec3 t_sph1 = vec3(-0.3, 1.5, 0.3);
   t_sph1 += anim_trans;
-  float dist_eye1 = sdf_sphere(trans_pt(p, t_sph1), 0.05);
+  vec3 p_sph1 = trans_pt(p, t_sph1);
+  float dist_eye1 = sdf_sphere(p_sph1, 0.05);
   vec3 t_sph2 = vec3(-0.7, 1.5, 0.3);
   t_sph2 += anim_trans;
   float dist_eye2 = sdf_sphere(trans_pt(p, t_sph2), 0.05);
@@ -448,6 +453,10 @@ float ease_in_out_quadratic(float t) {
   }
 }
 
+float ease_linear(float t, float b, float c, float d) {
+  return c * (t / d) + b;
+}
+
 vec3 colorConvert(vec3 rgb) {
   vec3 new_color;
   new_color[0] = (rgb[0] / 255.0);
@@ -464,11 +473,21 @@ void main() {
   vec3 dir = rayCast(s);
 
   // set up global animation values
-  anim_trans = vec3(0.0, 0.5 * (sin(u_Time * 3.14159 * 0.01)), 0.0);
-  anim_angle = vec3(0.0, 10.0, 0.0);
-
-  float shadow_test = shadow(u_Eye, light, 0.01, 20.0);
-
+  float time = float(u_Time);
+  anim_trans = vec3(0.0, 0.5 * ease_in_out_quadratic(sin(time * 3.14159 * 0.01)), 0.0);
+  // character animation dependent on passed in value
+  if (u_Anim == 0.0) {
+    // no animation
+    anim_angle = vec3(0.0);
+  }
+  else {
+    anim_angle = vec3(0.0, 0.0, (ease_linear(time, 0.0, 5.0, 3.0)));
+    anim_angle[2] = mod(anim_angle[2], 120.0);
+    if (anim_angle[2] > 60.0) {
+    anim_angle[2] = 120.0 - anim_angle[2];
+    }
+  }
+  
   vec3 center = vec3(0.0,0.0,0.0);
 
   // set up bounding box hierarchy
@@ -517,10 +536,10 @@ void main() {
         }
         else if (march[1] == 3.0) {
           // Hit char
-          diffuseColor = vec4(colorConvert(vec3(220.0, 126.0, 211.0)), 1.0);   
+          diffuseColor = vec4(u_Color / 255.0);
         }
         else if (march[1] == 4.0) {
-          // Hit char eye
+          // Hit char features
           diffuseColor = vec4(colorConvert(vec3(255.0, 223.0, 109.0)), 1.0);
         }
         else if (march[1] == 10.0) {
@@ -532,7 +551,6 @@ void main() {
         float diffuseTerm = dot(normalize(nor), normalize(light));
         // Avoid negative lighting values
         diffuseTerm = clamp(diffuseTerm, 0.0, 1.0);
-        diffuseTerm *= shadow_test;
         float ambientTerm = 0.2;
         float lightIntensity = diffuseTerm + ambientTerm;
 

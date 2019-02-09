@@ -1,4 +1,4 @@
-import {vec2, vec3} from 'gl-matrix';
+import {vec2, vec3, vec4} from 'gl-matrix';
 import * as Stats from 'stats-js';
 import * as DAT from 'dat-gui';
 import Square from './geometry/Square';
@@ -12,10 +12,13 @@ import ShaderProgram, {Shader} from './rendering/gl/ShaderProgram';
 const controls = {
   tesselations: 5,
   'Load Scene': loadScene, // A function pointer, essentially
+  color: [220, 126, 211],
+  charAnimated: false,
 };
 
 let square: Square;
 let time: number = 0;
+let prevColor: number[] = [220, 126, 211];
 
 function loadScene() {
   square = new Square(vec3.fromValues(0, 0, 0));
@@ -47,6 +50,8 @@ function main() {
 
   // Add controls to the gui
   const gui = new DAT.GUI();
+  gui.addColor(controls, 'color');
+  gui.add(controls, 'charAnimated');
 
   // get canvas and webgl context
   const canvas = <HTMLCanvasElement> document.getElementById('canvas');
@@ -83,9 +88,20 @@ function main() {
     gl.viewport(0, 0, window.innerWidth, window.innerHeight);
     renderer.clear();
     processKeyPresses();
+
+    if (controls.color != prevColor) {
+      // update color
+      prevColor = controls.color;
+    }
+    //if (controls.charAnimated == true) {
+      // animate true
+    //}
+
     renderer.render(camera, flat, [
       square,
-    ], time);
+    ], time, 
+    vec4.fromValues(prevColor[0],prevColor[1],prevColor[2],1),
+    controls.charAnimated);
     time++;
     stats.end();
 
